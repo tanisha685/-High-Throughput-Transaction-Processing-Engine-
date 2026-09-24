@@ -1,0 +1,63 @@
+@startuml failover-flow
+skinparam backgroundColor #0B0F19
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam sequence {
+    ArrowColor #38BDF8
+    ActorBorderColor #38BDF8
+    LifeLineBorderColor #818CF8
+    LifeLineBackgroundColor #1E293B
+    ParticipantBorderColor #A855F7
+    ParticipantBackgroundColor #1E293B
+    ParticipantFontColor #F8FAFC
+}
+
+autonumber
+participant "Payment Service\n(Active Worker)" as App #10B981
+participant "PgBouncer\n(Pool Router)" as PB #38BDF8
+participant "Patroni Cluster Mgr\n(DCS / Raft / etcd)" as Patroni #F59E0B
+participant "PostgreSQL Shard 1\nPrimary (AZ-a) [FAILS]" as DB_Pri #EF4444
+participant "PostgreSQL Shard 1\nStandby (AZ-b) [NEW PRI]" as DB_Sec #10B981
+participant "Prometheus / Alertmanager" as Alert #EC4899
+
+== 1. Failure Event & Heartbeat Timeout ==
+DB_Pri -[#EF4444]>x DB_Pri: Hardware Failure / Kernel Panic / AZ Crash
+App -> PB: Execute OCC Balance Write
+PB -> DB_Pri: TCP Query -> Connection Refused / Timeout
+activate PB
+PB --> App: SQL Exception: Connection Failed (500)
+deactivate PB
+
+Patroni -> DB_Pri: Health Check Heartbeat (Interval: 2s)
+note right of Patroni: Heartbeat fails (3 missed = 6s total)
+Patroni -> Patroni: Declare Primary Unhealthy & Revoke Leader Lease
+
+== 2. Leader Election & DCS Promotion (< 10 seconds) ==
+Patroni -> DB_Sec: Evaluate Replication Lag (LSN Check)
+DB_Sec --> Patroni: LSN matched with synchronous WAL stream (Zero Lag)
+Patroni -> Patroni: Acquire Leader Lock in Raft DCS for Standby AZ-b
+Patroni -> DB_Sec: Execute pg_promote()
+activate DB_Sec
+DB_Sec --> Patroni: Promoted to READ-WRITE Primary
+deactivate DB_Sec
+
+== 3. Dynamic Connection Pool Rewiring ==
+Patroni -> PB: Trigger Reload / Update Host Endpoint (AZ-b:5432)
+activate PB
+PB -> PB: Drain old failed connections & redirect active pool to New Primary
+PB --> Patroni: Rewiring Complete (Total Failover Time: 12.4s <= 30s RTO)
+deactivate PB
+
+== 4. Application Retry & Self-Healing ==
+App -> App: Jittered Retry #1 on OCC Balance Write
+App -> PB: Execute OCC Balance Write
+PB -> DB_Sec: UPDATE accounts SET available_balance = available_balance - :amt WHERE account_id = :id
+activate DB_Sec
+DB_Sec --> PB: 1 row updated (Commit Success)
+deactivate DB_Sec
+PB --> App: Transaction Committed (Zero Data Loss - RPO = 0)
+
+== 5. Telemetry & Post-Incident State ==
+Patroni -> Alert: Emit P1 Alert: Primary Shard 1 Failed over to Standby AZ-b
+Alert -> Alert: Log RTO Metrics (12.4s) & Auto-provision replacement replica in AZ-c
+@enduml

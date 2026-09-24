@@ -1,0 +1,36 @@
+@startuml circuit-breaker-fsm
+skinparam backgroundColor #0B0F19
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+
+skinparam state {
+    BackgroundColor #1E293B
+    BorderColor #38BDF8
+    FontColor #F8FAFC
+    ArrowColor #38BDF8
+}
+
+state CLOSED #1E293B {
+    state "Normal Operation\n(All Requests Pass Through)" as c_desc
+}
+
+state OPEN #450A0A {
+    state "Fast-Fail & Fallback\n(Requests blocked / Heuristic fallback)" as o_desc
+}
+
+state HALF_OPEN #713F12 {
+    state "Probe Phase\n(Allow limited test requests)" as h_desc
+}
+
+[*] --> CLOSED : System Startup / Initial State
+
+CLOSED --> OPEN : Failure Threshold Exceeded\n(e.g., 3 failures in 10s)\n[Trip Circuit]
+
+OPEN --> HALF_OPEN : Recovery Timeout Elapsed\n(e.g., after 15s cooldown)
+
+HALF_OPEN --> CLOSED : N Consecutive Probes Succeed\n[System Healed]
+
+HALF_OPEN --> OPEN : Any Single Probe Fails\n[Downstream Still Unhealthy]
+
+CLOSED --> CLOSED : Request Success\n(Reset failure count to 0)
+@enduml

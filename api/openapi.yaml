@@ -1,0 +1,329 @@
+openapi: 3.0.3
+info:
+  title: PayScale High-Throughput Transaction Processing Engine (HTTPE) API
+  version: 1.0.0
+  description: Production-grade REST/gRPC API specification for 12,000+ TPS distributed payment processing.
+servers:
+  - url: https://api.payscale.internal/v1
+    description: Production API Gateway (AWS Mumbai ap-south-1)
+  - url: https://staging-api.payscale.internal/v1
+    description: Staging Environment
+
+paths:
+  /payments/p2p:
+    post:
+      summary: Initiate Peer-to-Peer (P2P) Payment Transfer
+      operationId: initiateP2PPayment
+      tags:
+        - Payments
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Client-generated unique UUIDv4/UUIDv7 deduplication key (24h TTL)
+          schema:
+            type: string
+            format: uuid
+            example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/P2PPaymentRequest'
+      responses:
+        '200':
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Fraud check rejected / Account suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Insufficient funds or OCC contention
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /accounts/{account_id}/balance:
+    get:
+      summary: Get Account Available and Ledger Balances
+      operationId: getAccountBalance
+      tags:
+        - Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Account balance details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountBalanceResponse'
+        '404':
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /accounts/{account_id}/transactions:
+    get:
+      summary: List Account Transactions with Cursor-Based Pagination
+      operationId: listAccountTransactions
+      tags:
+        - Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: cursor
+          in: query
+          required: false
+          description: Base64 opaque cursor containing timestamp and UUID
+          schema:
+            type: string
+            example: "ZXlKMGVYQWlPaUpLVjFRaUxDSmhiR2NpT2lKSVV6STFOaUo5"
+      responses:
+        '200':
+          description: Paginated transaction list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTransactionsResponse'
+
+  /settlements/batch:
+    post:
+      summary: Trigger Merchant Batch Settlement
+      operationId: triggerBatchSettlement
+      tags:
+        - Settlements
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchSettlementRequest'
+      responses:
+        '202':
+          description: Batch settlement accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchSettlementResponse'
+
+components:
+  schemas:
+    P2PPaymentRequest:
+      type: object
+      required:
+        - source_account_id
+        - destination_account_id
+        - amount
+        - currency
+      properties:
+        source_account_id:
+          type: string
+          format: uuid
+          example: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+        destination_account_id:
+          type: string
+          format: uuid
+          example: "b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22"
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          example: 500.00
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          default: "INR"
+          example: "INR"
+        note:
+          type: string
+          maxLength: 255
+          example: "Diwali gift transfer"
+
+    TransactionResponse:
+      type: object
+      required:
+        - transaction_id
+        - status
+        - amount
+        - currency
+        - created_at
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+        saga_id:
+          type: string
+          format: uuid
+          example: "e38ac10b-58cc-4372-a567-0e02b2c3d888"
+        status:
+          type: string
+          enum: [INITIATED, PROCESSING, COMPLETED, FAILED, REVERSED]
+          example: "COMPLETED"
+        amount:
+          type: number
+          format: double
+          example: 500.00
+        fee_amount:
+          type: number
+          format: double
+          example: 0.00
+        currency:
+          type: string
+          example: "INR"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-09-24T12:00:00.000Z"
+        completed_at:
+          type: string
+          format: date-time
+          example: "2026-09-24T12:00:00.032Z"
+
+    AccountBalanceResponse:
+      type: object
+      required:
+        - account_id
+        - available_balance
+        - ledger_balance
+        - currency
+        - status
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        available_balance:
+          type: number
+          format: double
+          example: 12500.50
+        ledger_balance:
+          type: number
+          format: double
+          example: 12500.50
+        currency:
+          type: string
+          example: "INR"
+        status:
+          type: string
+          enum: [ACTIVE, FROZEN, SUSPENDED, CLOSED]
+          example: "ACTIVE"
+        tier:
+          type: string
+          enum: [BASIC, PREMIUM, MERCHANT]
+          example: "PREMIUM"
+
+    PaginatedTransactionsResponse:
+      type: object
+      required:
+        - data
+        - pagination
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionResponse'
+        pagination:
+          type: object
+          required:
+            - has_more
+          properties:
+            next_cursor:
+              type: string
+              nullable: true
+              example: "ZXlKMGVYQWlPaUpLVjFRaUxDSmhiR2NpT2lKSVV6STFOaUo5"
+            has_more:
+              type: boolean
+              example: true
+
+    BatchSettlementRequest:
+      type: object
+      required:
+        - settlement_date
+        - max_batch_size
+      properties:
+        settlement_date:
+          type: string
+          format: date
+          example: "2026-09-24"
+        max_batch_size:
+          type: integer
+          default: 100000
+          example: 50000
+
+    BatchSettlementResponse:
+      type: object
+      required:
+        - batch_id
+        - status
+        - message
+      properties:
+        batch_id:
+          type: string
+          example: "BATCH-20260924-001"
+        status:
+          type: string
+          example: "PROCESSING"
+        message:
+          type: string
+          example: "Batch settlement queued successfully"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error_code
+        - message
+        - timestamp
+      properties:
+        error_code:
+          type: string
+          example: "INSUFFICIENT_FUNDS"
+        message:
+          type: string
+          example: "Available balance is less than requested debit amount"
+        details:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-09-24T12:00:00Z"

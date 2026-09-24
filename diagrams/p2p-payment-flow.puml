@@ -1,0 +1,113 @@
+@startuml p2p-payment-flow
+skinparam backgroundColor #0B0F19
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam roundCorner 8
+skinparam sequence {
+    ArrowColor #38BDF8
+    ActorBorderColor #38BDF8
+    LifeLineBorderColor #818CF8
+    LifeLineBackgroundColor #1E293B
+    ParticipantBorderColor #A855F7
+    ParticipantBackgroundColor #1E293B
+    ParticipantFontColor #F8FAFC
+    BoxBackgroundColor #111827
+    BoxBorderColor #374151
+}
+
+autonumber
+actor "Payer Client" as Client #38BDF8
+participant "Kong Gateway" as GW #A855F7
+participant "Redis Cluster" as Cache #EF4444
+participant "Txn Orchestrator" as Orch #10B981
+participant "Fraud Service" as Fraud #F59E0B
+participant "Payment Service\n(Shard Router)" as Pay #10B981
+database "DB Shard A\n(Sender)" as DB_A #3B82F6
+database "DB Shard B\n(Receiver)" as DB_B #3B82F6
+queue "Apache Kafka" as Kafka #EC4899
+participant "Notify Service" as Notify #06B6D4
+
+== 1. Ingress & Idempotency Check ==
+Client -> GW: POST /v1/payments/p2p\n[Idempotency-Key: UUID, Amount, Sender, Receiver]
+activate GW
+GW -> Cache: SETNX(idemp_key, "IN_FLIGHT", TTL=86400s)
+activate Cache
+Cache --> GW: Key Acquired (1 = OK, 0 = Duplicate)
+deactivate Cache
+
+alt Idempotency Key Already Exists
+    GW -> Cache: GET(idemp_key)
+    Cache --> GW: Cached Response JSON
+    GW --> Client: 200 OK (Cached Response)
+end
+
+GW -> Orch: Initiate P2P Saga(txn_id, sender_id, receiver_id, amount)
+activate Orch
+
+== 2. Synchronous Fraud Evaluation (< 15ms SLA) ==
+Orch -> Fraud: Evaluate Risk(sender_id, amount, ip, velocity)
+activate Fraud
+Fraud --> Orch: Risk Score = 12 (APPROVED)
+deactivate Fraud
+
+== 3. Distributed Saga: Step 1 - Debit Sender Account (Shard A) ==
+Orch -> Pay: Debit Account(sender_id, amount, txn_id)
+activate Pay
+Pay -> DB_A: UPDATE accounts SET available_balance = available_balance - :amt, version = version + 1\nWHERE account_id = :sender_id AND version = :v AND available_balance >= :amt
+activate DB_A
+
+alt Debit OCC Success
+    DB_A --> Pay: 1 row updated (New Version = v+1)
+    Pay -> DB_A: INSERT INTO ledger_entries (DEBIT, sender_id, amount, txn_id)
+    Pay --> Orch: Debit Succeeded
+else Insufficient Balance or Version Conflict
+    DB_A --> Pay: 0 rows updated
+    deactivate DB_A
+    Pay --> Orch: Debit Failed (INSUFFICIENT_FUNDS / OCC_EXHAUSTED)
+    Orch -> Cache: SET(idemp_key, "FAILED_PAYMENT")
+    Orch --> GW: Txn Failed
+    GW --> Client: 422 Unprocessable Entity
+end
+
+== 4. Distributed Saga: Step 2 - Credit Receiver Account (Shard B) ==
+Orch -> Pay: Credit Account(receiver_id, amount, txn_id)
+Pay -> DB_B: UPDATE accounts SET available_balance = available_balance + :amt, version = version + 1\nWHERE account_id = :receiver_id AND version = :v
+activate DB_B
+
+alt Credit Success
+    DB_B --> Pay: 1 row updated
+    Pay -> DB_B: INSERT INTO ledger_entries (CREDIT, receiver_id, amount, txn_id)
+    Pay -> DB_B: INSERT INTO outbox_events (TXN_COMPLETED, txn_id)
+    deactivate DB_B
+    Pay --> Orch: Credit Succeeded
+    deactivate Pay
+    
+    Orch -> DB_A: UPDATE transactions SET status = 'COMPLETED'
+    Orch -> Cache: SET(idemp_key, TxnCompletedJSON, TTL=86400s)
+    Orch --> GW: 200 OK [status: "COMPLETED", txn_id]
+    GW --> Client: 200 OK [status: "COMPLETED", txn_id]
+    deactivate GW
+else Credit Fails (Shard B Down / Frozen Account)
+    DB_B --> Pay: Error / Timeout
+    Pay --> Orch: Credit Failed
+    
+    == Compensation Flow (Rollback) ==
+    Orch -> Pay: Compensate: Refund Sender(sender_id, amount, txn_id)
+    Pay -> DB_A: UPDATE accounts SET available_balance = available_balance + :amt WHERE account_id = :sender_id
+    Pay -> DB_A: INSERT INTO ledger_entries (REFUND, sender_id, amount, txn_id)
+    Pay --> Orch: Compensation Complete
+    Orch -> DB_A: UPDATE transactions SET status = 'FAILED'
+    Orch --> GW: 500 Internal Error / 422 Failed
+    GW --> Client: 500 Error (Transaction Rolled Back)
+end
+
+== 5. Asynchronous Event Notification ==
+Kafka <- DB_B: Debezium CDC publishes TXN_COMPLETED event
+activate Kafka
+Kafka -> Notify: Consume TXN_COMPLETED
+activate Notify
+Notify -> Client: Push Notification & WebSocket Update ("₹500 Received")
+deactivate Notify
+deactivate Kafka
+deactivate Orch
+@enduml

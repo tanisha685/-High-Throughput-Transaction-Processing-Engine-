@@ -1,0 +1,195 @@
+// ============================================================================
+// DBML Database Schema: PayScale High-Throughput Transaction Processing Engine
+// Visualize at: https://dbdiagram.io
+// ============================================================================
+
+Project HTTPE_PayScale {
+  database_type: 'PostgreSQL 16'
+  Note: 'Production-Grade Distributed Sharded Schema for 12,000+ TPS Financial Engine'
+}
+
+Enum account_type_enum {
+  SAVINGS
+  CURRENT
+  WALLET
+  MERCHANT
+  SETTLEMENT_POOL
+}
+
+Enum account_status_enum {
+  ACTIVE
+  FROZEN
+  SUSPENDED
+  CLOSED
+}
+
+Enum account_tier_enum {
+  BASIC
+  PREMIUM
+  MERCHANT
+}
+
+Enum transaction_type_enum {
+  P2P
+  MERCHANT_PAYMENT
+  SETTLEMENT
+  REVERSAL
+  FEE
+}
+
+Enum transaction_status_enum {
+  INITIATED
+  PROCESSING
+  COMPLETED
+  FAILED
+  REVERSED
+}
+
+Enum entry_direction_enum {
+  DEBIT
+  CREDIT
+}
+
+Enum ledger_entry_type_enum {
+  PAYMENT
+  FEE
+  REFUND
+  SETTLEMENT_PAYOUT
+  ADJUSTMENT
+}
+
+Enum kyc_status_enum {
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+Table users {
+  user_id uuid [pk, note: 'UUIDv7 Primary Key']
+  phone_number varchar(20) [unique, not null]
+  email varchar(255) [unique, not null]
+  full_name varchar(150) [not null]
+  kyc_status kyc_status_enum [default: 'PENDING', not null]
+  kyc_document_type varchar(50)
+  kyc_document_hash varchar(128)
+  user_status varchar(20) [default: 'ACTIVE', not null]
+  risk_score int [default: 0, not null]
+  created_at timestamptz [default: `CURRENT_TIMESTAMP`, not null]
+  updated_at timestamptz [default: `CURRENT_TIMESTAMP`, not null]
+}
+
+Table accounts {
+  account_id uuid [pk, note: 'UUIDv7 Hash Shard Key']
+  user_id uuid [not null, ref: > users.user_id]
+  account_type account_type_enum [default: 'SAVINGS', not null]
+  currency char(3) [default: 'INR', not null]
+  available_balance numeric(18,4) [not null, note: 'Immediate spendable funds (CHECK >= 0)']
+  ledger_balance numeric(18,4) [not null, note: 'Settled accounting balance']
+  version bigint [default: 1, not null, note: 'Optimistic Concurrency Control counter']
+  status account_status_enum [default: 'ACTIVE', not null]
+  tier account_tier_enum [default: 'BASIC', not null]
+  shard_key int [not null, note: 'hash(account_id) % 4']
+  daily_limit numeric(18,4) [default: 100000.0000, not null]
+  created_at timestamptz [default: `CURRENT_TIMESTAMP`, not null]
+  updated_at timestamptz [default: `CURRENT_TIMESTAMP`, not null]
+}
+
+Table transactions {
+  transaction_id uuid [note: 'Composite PK with created_at for Range Partitioning']
+  idempotency_key varchar(128) [unique, not null, note: 'Client Deduplication Key (24h TTL)']
+  transaction_type transaction_type_enum [not null]
+  source_account_id uuid [ref: > accounts.account_id]
+  destination_account_id uuid [ref: > accounts.account_id]
+  amount numeric(18,4) [not null, note: 'CHECK amount > 0']
+  fee_amount numeric(18,4) [default: 0.0000, not null]
+  currency char(3) [default: 'INR', not null]
+  status transaction_status_enum [default: 'INITIATED', not null]
+  saga_id uuid [not null, note: 'Orchestrator Saga Instance Reference']
+  failure_reason varchar(500)
+  risk_score int [default: 0]
+  metadata jsonb [default: '{}']
+  created_at timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  completed_at timestamptz
+  
+  indexes {
+    (transaction_id, created_at) [pk]
+    idempotency_key
+    (source_account_id, created_at)
+    (destination_account_id, created_at)
+  }
+}
+
+Table ledger_entries {
+  entry_id uuid [note: 'Composite PK with created_at']
+  transaction_id uuid [not null, ref: > transactions.transaction_id]
+  account_id uuid [not null, ref: > accounts.account_id]
+  entry_type ledger_entry_type_enum [not null]
+  direction entry_direction_enum [not null]
+  amount numeric(18,4) [not null, note: 'CHECK amount > 0']
+  balance_after numeric(18,4) [not null]
+  currency char(3) [default: 'INR', not null]
+  description varchar(255)
+  created_at timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (entry_id, created_at) [pk]
+    (account_id, created_at)
+    transaction_id
+  }
+}
+
+Table transaction_events {
+  event_id uuid [pk]
+  transaction_id uuid [not null, ref: > transactions.transaction_id]
+  saga_id uuid [not null]
+  from_state varchar(50) [not null]
+  to_state varchar(50) [not null]
+  event_type varchar(50) [not null]
+  payload jsonb [default: '{}', not null]
+  retry_count int [default: 0, not null]
+  created_at timestamptz [default: `CURRENT_TIMESTAMP`, not null]
+}
+
+Table fraud_rules {
+  rule_id uuid [pk]
+  rule_code varchar(50) [unique, not null]
+  rule_name varchar(150) [not null]
+  condition_expression text [not null]
+  risk_score_delta int [default: 10, not null]
+  action varchar(30) [default: 'FLAG_MANUAL_REVIEW', not null]
+  is_active boolean [default: true, not null]
+  priority int [default: 100, not null]
+  created_at timestamptz [default: `CURRENT_TIMESTAMP`, not null]
+  updated_at timestamptz [default: `CURRENT_TIMESTAMP`, not null]
+}
+
+Table merchant_settlements {
+  settlement_id uuid [pk]
+  batch_id varchar(64) [not null]
+  merchant_id uuid [not null, ref: > accounts.account_id]
+  gross_amount numeric(18,4) [not null]
+  net_amount numeric(18,4) [not null]
+  mdr_fee numeric(18,4) [default: 0.0000, not null]
+  gst_fee numeric(18,4) [default: 0.0000, not null]
+  transaction_count int [not null]
+  status varchar(20) [default: 'PENDING', not null]
+  bank_reference_id varchar(100)
+  settlement_date date [not null, default: `CURRENT_DATE`]
+  created_at timestamptz [default: `CURRENT_TIMESTAMP`, not null]
+  completed_at timestamptz
+}
+
+Table notification_log {
+  notification_id uuid [pk]
+  user_id uuid [not null, ref: > users.user_id]
+  transaction_id uuid [ref: > transactions.transaction_id]
+  channel varchar(20) [not null]
+  destination varchar(255) [not null]
+  payload jsonb [default: '{}', not null]
+  status varchar(20) [default: 'QUEUED', not null]
+  retry_count int [default: 0, not null]
+  provider_response_id varchar(100)
+  created_at timestamptz [default: `CURRENT_TIMESTAMP`, not null]
+  sent_at timestamptz
+}

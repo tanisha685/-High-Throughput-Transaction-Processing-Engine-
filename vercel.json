@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "public": true,
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/simulation-app/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/simulation-app/$1"
+    }
+  ]
+}

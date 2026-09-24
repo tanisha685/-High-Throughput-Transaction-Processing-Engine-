@@ -1,0 +1,69 @@
+@startuml batch-settlement-flow
+skinparam backgroundColor #0B0F19
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam sequence {
+    ArrowColor #38BDF8
+    ActorBorderColor #38BDF8
+    LifeLineBorderColor #818CF8
+    LifeLineBackgroundColor #1E293B
+    ParticipantBorderColor #A855F7
+    ParticipantBackgroundColor #1E293B
+    ParticipantFontColor #F8FAFC
+}
+
+autonumber
+actor "Settlement Cron / Admin" as Cron #38BDF8
+participant "Settlement Service" as Settle #10B981
+participant "Payment Service" as Pay #10B981
+database "DB Shards (0..3)" as DB #3B82F6
+participant "Banking Partner API\n(NPCI / NEFT / RTGS)" as Bank #F59E0B
+queue "Kafka Event Bus" as Kafka #EC4899
+participant "Reconciliation Engine" as Recon #06B6D4
+
+== 1. Batch Cut-Off & Aggregation ==
+Cron -> Settle: Trigger Daily Batch Settlement (BatchSize <= 100,000)
+activate Settle
+
+Settle -> DB: Lock & Aggregate Pending Merchant Credits\n(SELECT merchant_id, SUM(amount), COUNT(*) FROM transactions WHERE status='COMPLETED' AND settled=false GROUP BY merchant_id)
+activate DB
+DB --> Settle: Aggregated Settlement Summary (e.g., 8,500 Merchants, ₹42.5 Cr)
+deactivate DB
+
+== 2. Double-Entry Invariant Pre-Validation ==
+Settle -> Recon: Validate Pre-Settlement Balance Integrity
+activate Recon
+Recon --> Settle: Invariant Valid (Σ Debits == Σ Credits)
+deactivate Recon
+
+== 3. Core Banking Payout Instruction ==
+loop For Each Merchant Batch Chunk (ChunkSize = 500)
+    Settle -> Bank: POST /v1/payouts/batch (NEFT/RTGS Transfer Instruction)
+    activate Bank
+    Bank --> Settle: 202 Accepted (Batch Payout Ref ID: BANK-REF-9921)
+    deactivate Bank
+    
+    Settle -> DB: INSERT INTO merchant_settlements (settlement_id, batch_id, merchant_id, amount, status='PROCESSING')
+end
+
+== 4. Asynchronous Payout Webhook & Ledger Finalization ==
+Bank -> Settle: Webhook Callback: Payout Batch Success [BANK-REF-9921]
+Settle -> Pay: Finalize Merchant Settlement Balances
+activate Pay
+
+Pay -> DB: Multi-row UPDATE accounts SET ledger_balance = ledger_balance - :amount WHERE account_id = :merchant_id
+activate DB
+Pay -> DB: INSERT INTO ledger_entries (SETTLEMENT_PAYOUT, merchant_id, amount, bank_ref)
+Pay -> DB: UPDATE merchant_settlements SET status='SETTLED', completed_at=NOW()
+DB --> Pay: Batch Update Committed
+deactivate DB
+Pay --> Settle: Settlement Complete
+deactivate Pay
+
+== 5. Audit & Compliance Event Emission ==
+Settle -> Kafka: Publish SETTLEMENT_COMPLETED (BatchID, TotalAmount, MerchantCount)
+activate Kafka
+Kafka -> Recon: Run Post-Settlement Reconciliation
+deactivate Kafka
+deactivate Settle
+@enduml
