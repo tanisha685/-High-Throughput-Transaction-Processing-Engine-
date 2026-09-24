@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRANSACTION TITAN: The Scale Architect | PayScale HTTPE</title>
+  <meta name="description" content="High-Throughput Transaction Processing Engine (12,000+ TPS) Live Architecture Simulator and Engineering Workbench.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-brand">
+      <div class="brand-badge">HTTPE</div>
+      <div class="brand-text">
+        <span class="title">TRANSACTION TITAN</span>
+        <span class="subtitle">PayScale Financial Technologies • 12,000+ TPS Architecture</span>
+      </div>
+    </div>
+    
+    <div class="nav-metrics">
+      <div class="metric-pill">
+        <span class="dot live-pulse"></span>
+        <span class="label">ENGINE:</span>
+        <span class="value" id="engine-status">ONLINE</span>
+      </div>
+      <div class="metric-pill highlight">
+        <span class="label">SLA:</span>
+        <span class="value">99.99% (4 Nines)</span>
+      </div>
+      <div class="metric-pill">
+        <span class="label">BUDGET:</span>
+        <span class="value" id="nav-budget">$40,850 / $45,000</span>
+      </div>
+    </div>
+
+    <div class="nav-actions">
+      <button class="btn btn-outline" id="btn-toggle-sound" title="Toggle audio feedback">🔊 Sound</button>
+      <button class="btn btn-primary" id="btn-export-report">📋 Export ARB Report</button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="dashboard-grid">
+    <!-- Left Sidebar: Controls & Workload Injection -->
+    <aside class="sidebar-panel">
+      <div class="panel-card">
+        <div class="panel-header">
+          <h3>⚡ Workload Generation Engine</h3>
+          <span class="badge" id="traffic-multiplier-badge">10.0x Target</span>
+        </div>
+
+        <div class="control-group">
+          <label for="tps-slider">Target Throughput: <strong id="tps-display">12,000 TPS</strong></label>
+          <input type="range" id="tps-slider" min="1200" max="20000" step="200" value="12000">
+          <div class="slider-marks">
+            <span>1.2K (Baseline)</span>
+            <span>12K (Target)</span>
+            <span>18K (Burst)</span>
+          </div>
+        </div>
+
+        <div class="preset-buttons">
+          <button class="btn-preset" data-tps="1200">1.2K Baseline</button>
+          <button class="btn-preset active" data-tps="12000">12K Diwali</button>
+          <button class="btn-preset burst" data-tps="18000">18K Flash Burst</button>
+        </div>
+
+        <div class="control-group">
+          <label>Workload Profile Mix</label>
+          <div class="workload-breakdown">
+            <div class="wb-item"><span class="wb-color p2p"></span> P2P Transfers: <strong>60%</strong></div>
+            <div class="wb-item"><span class="wb-color bal"></span> Balance Checks: <strong>20%</strong></div>
+            <div class="wb-item"><span class="wb-color merch"></span> Merchant POS: <strong>10%</strong></div>
+            <div class="wb-item"><span class="wb-color other"></span> History & Refunds: <strong>10%</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chaos Engineering Injection Deck -->
+      <div class="panel-card chaos-deck">
+        <div class="panel-header">
+          <h3>💥 Chaos Engineering Deck</h3>
+          <span class="badge danger">Fault Injection</span>
+        </div>
+
+        <div class="chaos-buttons">
+          <button class="btn-chaos" id="btn-chaos-db" data-fault="db_failover">
+            <span class="icon">🔥</span>
+            <div class="text">
+              <strong>Kill Shard 1 Primary</strong>
+              <small>Tests Patroni RTO &lt; 15s</small>
+            </div>
+          </button>
+
+          <button class="btn-chaos" id="btn-chaos-fraud" data-fault="fraud_spike">
+            <span class="icon">⏱️</span>
+            <div class="text">
+              <strong>Degrade Fraud Svc (50ms)</strong>
+              <small>Tests CB-FRAUD Trip & Fallback</small>
+            </div>
+          </button>
+
+          <button class="btn-chaos" id="btn-chaos-kafka" data-fault="kafka_lag">
+            <span class="icon">📦</span>
+            <div class="text">
+              <strong>Spike Kafka Consumer Lag</strong>
+              <small>Inject 25,000 msg backlog</small>
+            </div>
+          </button>
+
+          <button class="btn-chaos" id="btn-chaos-redis" data-fault="redis_evict">
+            <span class="icon">⚡</span>
+            <div class="text">
+              <strong>Flush Redis Hot Cache</strong>
+              <small>Tests DB bulkheads on 100% miss</small>
+            </div>
+          </button>
+        </div>
+        <button class="btn btn-secondary w-full" id="btn-reset-chaos">🔄 Recover All Systems</button>
+      </div>
+
+      <!-- Achievement Badges -->
+      <div class="panel-card badges-card">
+        <div class="panel-header">
+          <h3>🏆 Architect Badges Unlocked</h3>
+          <span class="badge gold" id="badge-count">13 / 13</span>
+        </div>
+        <div class="badge-grid" id="badge-container">
+          <!-- Dynamically Populated -->
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center Stage: Telemetry, Topology & Simulation Visualizer -->
+    <section class="main-stage">
+      <!-- Live KPI Banners -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-title">Current Ingestion Rate</div>
+          <div class="kpi-value" id="kpi-tps">12,040 <span class="unit">TPS</span></div>
+          <div class="kpi-subtext positive" id="kpi-processed-total">Total: 1,482,900 txns</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-title">p50 Latency (Median)</div>
+          <div class="kpi-value positive" id="kpi-p50">21.4 <span class="unit">ms</span></div>
+          <div class="kpi-subtext">SLA Target: &le; 30ms</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-title">p99 Latency (99th %)</div>
+          <div class="kpi-value positive" id="kpi-p99">58.2 <span class="unit">ms</span></div>
+          <div class="kpi-subtext">SLA Target: &le; 100ms</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-title">Error Rate</div>
+          <div class="kpi-value positive" id="kpi-error-rate">0.002 <span class="unit">%</span></div>
+          <div class="kpi-subtext">Zero Double-Spend</div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="stage-tabs">
+        <button class="tab-btn active" data-tab="tab-topology">🖥️ Live System Topology (13 Components)</button>
+        <button class="tab-btn" data-tab="tab-occ-tester">🔄 Interactive OCC & Saga Lab</button>
+        <button class="tab-btn" data-tab="tab-telemetry">📈 Real-Time Grafana Telemetry</button>
+        <button class="tab-btn" data-tab="tab-docs">📚 15-Day Architecture Workbench</button>
+      </div>
+
+      <!-- Tab 1: Live System Topology -->
+      <div class="tab-content active" id="tab-topology">
+        <div class="topology-container">
+          <!-- Ingress Layer -->
+          <div class="topo-layer">
+            <div class="layer-header">1. INGRESS & TRAFFIC (AWS MUMBAI ap-south-1)</div>
+            <div class="topo-nodes">
+              <div class="topo-node" id="node-nlb">
+                <div class="node-icon">🌐</div>
+                <div class="node-name">AWS Network LB</div>
+                <div class="node-meta">mTLS 1.3 • L4/L7</div>
+                <div class="node-status healthy">HEALTHY</div>
+              </div>
+              <div class="topo-node" id="node-kong">
+                <div class="node-icon">🚪</div>
+                <div class="node-name">Kong API Gateway</div>
+                <div class="node-meta">4 Nodes • Token Bucket</div>
+                <div class="node-status healthy">HEALTHY</div>
+              </div>
+              <div class="topo-node" id="node-redis">
+                <div class="node-icon">⚡</div>
+                <div class="node-name">Redis Cluster 7.2</div>
+                <div class="node-meta">6 Nodes (96 GB) • &lt;1.2ms</div>
+                <div class="node-status healthy" id="status-redis">HEALTHY (94% Hit)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Core Microservices Layer -->
+          <div class="topo-layer">
+            <div class="layer-header">2. CORE DISTRIBUTED MICROSERVICES</div>
+            <div class="topo-nodes">
+              <div class="topo-node" id="node-orch">
+                <div class="node-icon">🧠</div>
+                <div class="node-name">Transaction Orchestrator</div>
+                <div class="node-meta">8 Pods • Saga FSM</div>
+                <div class="node-status healthy">HEALTHY</div>
+              </div>
+              <div class="topo-node" id="node-fraud">
+                <div class="node-icon">🛡️</div>
+                <div class="node-name">Fraud Detection Service</div>
+                <div class="node-meta">ONNX ML • SLA &lt;15ms</div>
+                <div class="node-status healthy" id="status-fraud">CB-FRAUD: CLOSED (9.4ms)</div>
+              </div>
+              <div class="topo-node" id="node-payment">
+                <div class="node-icon">💳</div>
+                <div class="node-name">Payment Processing Svc</div>
+                <div class="node-meta">12 Pods • Netty/OCC</div>
+                <div class="node-status healthy">HEALTHY</div>
+              </div>
+              <div class="topo-node" id="node-account">
+                <div class="node-icon">👤</div>
+                <div class="node-name">Account Service</div>
+                <div class="node-meta">6 Pods • KYC & Tiers</div>
+                <div class="node-status healthy">HEALTHY</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sharded Database Tier -->
+          <div class="topo-layer">
+            <div class="layer-header">3. DISTRIBUTED STORAGE (4 POSTGRESQL 16 HASH SHARDS)</div>
+            <div class="topo-nodes shards-grid">
+              <div class="topo-node shard-node" id="node-shard-0">
+                <div class="node-icon">🗄️</div>
+                <div class="node-name">Shard 0 (hash % 4 = 0)</div>
+                <div class="node-meta">Primary (AZ-a) + 2 Standbys</div>
+                <div class="node-status healthy" id="status-shard-0">3,010 TPS • 10.2ms</div>
+              </div>
+              <div class="topo-node shard-node" id="node-shard-1">
+                <div class="node-icon">🗄️</div>
+                <div class="node-name">Shard 1 (hash % 4 = 1)</div>
+                <div class="node-meta">Primary (AZ-b) + 2 Standbys</div>
+                <div class="node-status healthy" id="status-shard-1">2,980 TPS • 9.8ms</div>
+              </div>
+              <div class="topo-node shard-node" id="node-shard-2">
+                <div class="node-icon">🗄️</div>
+                <div class="node-name">Shard 2 (hash % 4 = 2)</div>
+                <div class="node-meta">Primary (AZ-c) + 2 Standbys</div>
+                <div class="node-status healthy" id="status-shard-2">3,040 TPS • 10.4ms</div>
+              </div>
+              <div class="topo-node shard-node" id="node-shard-3">
+                <div class="node-icon">🗄️</div>
+                <div class="node-name">Shard 3 (hash % 4 = 3)</div>
+                <div class="node-meta">Primary (AZ-a) + 2 Standbys</div>
+                <div class="node-status healthy" id="status-shard-3">3,010 TPS • 10.1ms</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Event Streaming & Async Layer -->
+          <div class="topo-layer">
+            <div class="layer-header">4. ASYNCHRONOUS EVENT BUS & CDC STREAMING</div>
+            <div class="topo-nodes">
+              <div class="topo-node wide" id="node-kafka">
+                <div class="node-icon">⚡</div>
+                <div class="node-name">Apache Kafka 3.6 Cluster (3 Brokers)</div>
+                <div class="node-meta">48 Partitions • Transactional Outbox • EOS</div>
+                <div class="node-status healthy" id="status-kafka">Consumer Lag: 42 msgs</div>
+              </div>
+              <div class="topo-node" id="node-notify">
+                <div class="node-icon">🔔</div>
+                <div class="node-name">Notification Svc</div>
+                <div class="node-meta">50k WebSockets</div>
+                <div class="node-status healthy">HEALTHY</div>
+              </div>
+              <div class="topo-node" id="node-recon">
+                <div class="node-icon">⚖️</div>
+                <div class="node-name">Reconciliation Svc</div>
+                <div class="node-meta">Double-Entry Audit</div>
+                <div class="node-status healthy">BALANCED</div>
+              </div>
+              <div class="topo-node" id="node-audit">
+                <div class="node-icon">📜</div>
+                <div class="node-name">Audit & RBI S3</div>
+                <div class="node-meta">2-Year Hot Retention</div>
+                <div class="node-status healthy">COMPLIANT</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Interactive OCC & Saga Lab -->
+      <div class="tab-content" id="tab-occ-tester">
+        <div class="lab-container">
+          <div class="lab-header">
+            <h3>🧪 Optimistic Concurrency Control (OCC) & Saga Race Condition Tester</h3>
+            <p>Simulate concurrent debits hitting the same account simultaneously to observe atomic Compare-And-Swap (CAS), version vectors, and zero double-spending.</p>
+          </div>
+
+          <div class="lab-grid">
+            <div class="account-card">
+              <h4>🎯 Target Account State</h4>
+              <div class="acc-row"><span>Account ID:</span> <code>a0eebc99-9c0b-4ef8-bb6d-shard0</code></div>
+              <div class="acc-row"><span>Assigned Shard:</span> <strong class="badge">Shard 0</strong></div>
+              <div class="acc-row"><span>Available Balance:</span> <strong class="balance-text" id="lab-balance">INR 1,000.00</strong></div>
+              <div class="acc-row"><span>OCC Version:</span> <strong class="version-badge" id="lab-version">v1</strong></div>
+              <div class="acc-row"><span>Status:</span> <span class="badge success" id="lab-status">ACTIVE</span></div>
+
+              <div class="lab-actions">
+                <button class="btn btn-primary" id="btn-fire-single-debit">💸 Single Debit (INR 200)</button>
+                <button class="btn btn-danger" id="btn-fire-race-debits">⚡ Race 5 Concurrent Debits (INR 300 each)</button>
+                <button class="btn btn-secondary" id="btn-reset-lab-account">🔄 Reset Account to INR 1,000</button>
+              </div>
+            </div>
+
+            <div class="execution-log-card">
+              <h4>📜 Execution Trace & Saga State Transitions</h4>
+              <div class="console-log" id="lab-console-log">
+                <div class="log-entry info">[SYSTEM INIT] OCC Balance Engine Initialized. Version = 1, Balance = INR 1,000.00</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Real-Time Grafana Telemetry -->
+      <div class="tab-content" id="tab-telemetry">
+        <div class="telemetry-dashboard">
+          <div class="chart-card">
+            <h4>📊 Ingestion Throughput (TPS) Over Time</h4>
+            <canvas id="chart-tps" height="140"></canvas>
+          </div>
+          <div class="chart-card">
+            <h4>⏱️ Latency Percentiles (p50 / p95 / p99)</h4>
+            <canvas id="chart-latency" height="140"></canvas>
+          </div>
+          <div class="chart-card">
+            <h4>🗄️ PostgreSQL Shard Workload Balance</h4>
+            <div class="shard-bars" id="shard-bars-container">
+              <!-- Dynamically render bar distribution -->
+            </div>
+          </div>
+          <div class="chart-card">
+            <h4>📦 Kafka Consumer Group Lag Monitor</h4>
+            <div class="lag-monitor">
+              <div class="lag-row"><span>notify-worker-group:</span> <strong id="lag-notify">24 msgs</strong> (Healthy)</div>
+              <div class="lag-row"><span>recon-worker-group:</span> <strong id="lag-recon">12 msgs</strong> (Healthy)</div>
+              <div class="lag-row"><span>audit-compliance-group:</span> <strong id="lag-audit">18 msgs</strong> (Healthy)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 4: 15-Day Deliverable Explorer -->
+      <div class="tab-content" id="tab-docs">
+        <div class="docs-browser">
+          <div class="docs-sidebar">
+            <h4>📑 Sprint Deliverables</h4>
+            <ul class="docs-list" id="docs-nav-list">
+              <li class="active" data-doc="01-scenario-analysis">Day 1: Scenario Analysis</li>
+              <li data-doc="02-technology-evaluation">Day 2: Technology Evaluation</li>
+              <li data-doc="03-high-level-design">Day 3: High-Level Design (HLD)</li>
+              <li data-doc="04-data-flow-design">Day 4: Data Flow & Sequences</li>
+              <li data-doc="05-database-schema">Day 5: Database DDLs & ERD</li>
+              <li data-doc="06-sharding-strategy">Day 6: Sharding Strategy</li>
+              <li data-doc="07-message-queue-topology">Day 7: Kafka Topology & EOS</li>
+              <li data-doc="08-concurrency-control">Day 8: OCC & Correctness Proof</li>
+              <li data-doc="09-fault-tolerance">Day 9: Circuit Breakers & Chaos</li>
+              <li data-doc="10-api-specification">Day 10: OpenAPI 3.0 Spec</li>
+              <li data-doc="11-load-testing-strategy">Day 11: Load Testing & Metrics</li>
+              <li data-doc="12-capacity-planning">Day 12: Capacity & $40.8K Cost</li>
+              <li data-doc="13-fmea">Day 13: 25-Point FMEA Table</li>
+              <li data-doc="14-architecture-review-deck">Day 14: ARB Slide Deck</li>
+              <li data-doc="15-arb-defense-preparation">Day 15: ARB Q1-Q10 Defense</li>
+              <li data-doc="self-assessment">Scorecard: SELF-ASSESSMENT.md</li>
+              <li data-doc="reflection">Reflection: REFLECTION.md</li>
+            </ul>
+          </div>
+          <div class="docs-viewer">
+            <div class="docs-viewer-header">
+              <h3 id="doc-viewer-title">Day 1: Scenario Analysis & Bottlenecks</h3>
+              <span class="badge" id="doc-file-badge">docs/01-scenario-analysis.md</span>
+            </div>
+            <div class="docs-viewer-body" id="doc-viewer-content">
+              <!-- Rendered document content -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Export Report Modal -->
+  <div class="modal-backdrop" id="export-modal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🏛️ Architecture Review Board (ARB) Executive Dossier</h3>
+        <button class="btn-close" id="btn-close-modal">&times;</button>
+      </div>
+      <div class="modal-body" id="export-dossier-content">
+        <!-- Executive summary printout -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-print-dossier">🖨️ Print / Save as PDF</button>
+        <button class="btn btn-primary" id="btn-close-modal-2">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
